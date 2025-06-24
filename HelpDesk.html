@@ -1,0 +1,454 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, RadialBarChart, RadialBar, PolarAngleAxis } from 'recharts';
+import { ChevronDown, Search, PlusCircle, LayoutList, Kanban, FileText, BarChart2, MessageSquare, BrainCircuit, Book, User, Building, Tag, Paperclip, AlertTriangle, CheckCircle, Star, Clock, Lightbulb, Mail, Phone, MessageCircle as ChatIcon, UploadCloud, Users, X, PlayCircle, Smile, Frown, Meh, Award, Trophy, ShoppingCart, MousePointerClick, ShieldCheck, Zap, HeartPulse, GitMerge, FolderKanban, Calendar, ClipboardCheck, Briefcase, Globe, Share2, PauseCircle, Timer } from 'lucide-react';
+
+// --- ESTRUTURA DE DADOS FINAL E COMPLETA (ITSM) ---
+const SECTORS = { 'marketing': 'Agência de Marketing', 'real_estate': 'Imobiliária', 'software': 'Software e TI', 'clinics': 'Clínicas/Consultórios', 'law': 'Advocacia', 'retail': 'Varejo' };
+const DEPARTMENTS = ['Suporte Técnico N1', 'Suporte Técnico N2', 'Vendas', 'Financeiro', 'Infraestrutura', 'Geral'];
+const AGENTS = [
+    {id: 1, name: 'Ana Beatriz', avatar: '👩‍💻', achievements: [{name: 'Mestre do CSAT', icon: Star, color: 'text-yellow-400'}, {name: 'Resolvedor Rápido', icon: Zap, color: 'text-blue-500'}]}, 
+    {id: 2, name: 'Carlos Silva', avatar: '👨‍💼', achievements: [{name: 'Especialista em Faturamento', icon: ShieldCheck, color: 'text-green-500'}]}, 
+    {id: 3, name: 'Juliana Costa', avatar: '👩‍🔬', achievements: []}
+];
+const CHANNELS = { 
+    'email': { name: 'E-mail', icon: Mail }, 
+    'phone': { name: 'Telefone', icon: Phone }, 
+    'chat': { name: 'Chat', icon: ChatIcon },
+    'whatsapp': { name: 'WhatsApp', icon: ChatIcon },
+    'crm': { name: 'CRM', icon: Briefcase },
+    'social': { name: 'Redes Sociais', icon: Share2 },
+    'site': { name: 'Site', icon: Globe }
+};
+const TICKET_TYPES = ['Dúvida', 'Incidente', 'Problema', 'Mudança (RFC)', 'Solicitação'];
+const CURRENT_USER_ID = 1;
+const SLA_PROFILES = {
+    'Bronze': { responseTime: 8, resolutionTime: 48, businessHours: true },
+    'Prata': { responseTime: 4, resolutionTime: 24, businessHours: true },
+    'Ouro': { responseTime: 1, resolutionTime: 8, businessHours: false }
+};
+
+const addHours = (date, hours) => new Date(date.getTime() + hours * 60 * 60 * 1000);
+
+// Função para simular a análise de risco de SLA
+const calculateSlaRisk = (ticket) => {
+    if (!ticket.slaDue || ticket.status === 'Resolvido') return { level: 'N/A', color: 'bg-gray-400'};
+    const hoursToSla = (+new Date(ticket.slaDue) - +new Date()) / 3600000;
+    const lastSentiment = ticket.history[ticket.history.length - 1]?.sentiment;
+    if (ticket.priority === 'Alta' || lastSentiment === 'negative') {
+        if (hoursToSla < 2) return { level: 'Alto', color: 'bg-red-500' };
+        return { level: 'Médio', color: 'bg-yellow-500' };
+    }
+    if (hoursToSla < 8) return { level: 'Médio', color: 'bg-yellow-500' };
+    return { level: 'Baixo', color: 'bg-green-500' };
+};
+
+const initialTickets = [
+    { id: 'TKT-001', subject: 'Problema com campanha de ads', clientName: 'Contato Principal', clientCompany: 'Loja de Calçados ABC', clientEmail: 'contato@lojabc.com', clientPhone: null, clientSla: 'Prata', status: 'Aberto', priority: 'Alta', department: 'Suporte Técnico N1', agentId: 1, type: 'Incidente', channel: 'email', createdAt: new Date(new Date().setDate(new Date().getDate() - 1)), slaDue: addHours(new Date(), 4), sector: 'marketing', history: [{ user: 'Cliente', message: 'Minha campanha no Google Ads não está gerando cliques. Já verifiquei o orçamento e está tudo ok. Podem me ajudar? Estou perdendo vendas.', timestamp: new Date(new Date().setDate(new Date().getDate() - 1)), sentiment: 'negative' }], tags: ['Google Ads', 'Urgente', 'Marketing'], attachments: [{ name: 'screenshot-error.png', size: '128KB' }], csatScore: null, viewingBy: [2], linkedProblemId: 'PRB-001', timeTracked: 3650 },
+    { id: 'TKT-002', subject: 'Dúvida sobre contrato de aluguel', clientName: 'João Silva', clientCompany: null, clientEmail: 'joao.silva@email.com', clientPhone: '+55 11 98765-4321', clientSla: 'Bronze', status: 'Pendente', priority: 'Média', department: 'Vendas', agentId: 2, type: 'Dúvida', channel: 'phone', createdAt: new Date(), slaDue: addHours(new Date(), 24), sector: 'real_estate', history: [{ user: 'Cliente', message: 'Gostaria de esclarecer a cláusula 5.2 do contrato de locação do imóvel na Rua Principal, 123.', timestamp: new Date(), sentiment: 'neutral' }], tags: ['Contrato', 'Dúvida', 'Jurídico'], attachments: [], csatScore: null, viewingBy: [], timeTracked: 980 },
+    { id: 'TKT-003', subject: 'API não retorna dados esperados', clientName: 'Mariana Lima (Dev)', clientCompany: 'Startup Inovadora', clientEmail: 'dev@inovadora.io', clientPhone: '+55 21 99999-8888', clientSla: 'Ouro', status: 'Resolvido', priority: 'Alta', department: 'Suporte Técnico N2', agentId: 1, type: 'Incidente', channel: 'chat', createdAt: new Date(new Date().setDate(new Date().getDate() - 2)), resolvedAt: new Date(new Date().setDate(new Date().getDate() - 1)), sector: 'software', history: [{ user: 'Cliente', message: 'A chamada para /v1/users está retornando erro 500. Preciso disso funcionando com urgência!', sentiment: 'negative' }, { user: 'Ana Beatriz', message: 'Carlos, pode verificar os logs do servidor para o cliente Startup Inovadora?', sentiment: 'neutral' }, { user: 'Carlos Silva', message: 'Verificando... Encontrei uma exceção de banco de dados. Parece ser um problema de query.', sentiment: 'neutral' }, {user: 'Ana Beatriz', message: 'O problema foi identificado e um hotfix foi aplicado. Funcionou perfeitamente, obrigado!', sentiment: 'positive'}], tags: ['API', 'Bug', 'Backend'], attachments: [{ name: 'log-api.txt', size: '32KB' }], csatScore: 5, viewingBy: [], linkedProblemId: 'PRB-001', timeTracked: 7200 },
+    { id: 'PRB-001', subject: 'Análise de instabilidade na API de usuários', clientName: 'Interno', clientEmail: 'it@internal.com', status: 'Em Análise', priority: 'Alta', department: 'Infraestrutura', agentId: 1, type: 'Problema', channel: 'internal', createdAt: new Date(new Date().setDate(new Date().getDate() - 2)), slaDue: null, sector: 'software', history: [{ user: 'Sistema', message: 'Problema criado para investigar múltiplos incidentes relacionados à API.', timestamp: new Date(), sentiment: 'neutral' }], tags: ['API', 'Causa Raiz'], attachments: [], csatScore: null, viewingBy: [1,2], rootCause: '', workaround: 'Reiniciar o serviço da API temporariamente.', solution: '' },
+    { id: 'RFC-001', subject: 'Atualização do cluster de banco de dados', clientName: 'Interno', clientEmail: 'it@internal.com', status: 'Aprovação Pendente', priority: 'Alta', department: 'Infraestrutura', agentId: 2, type: 'Mudança (RFC)', channel: 'internal', createdAt: new Date(), slaDue: null, sector: 'software', history: [], tags: ['DB', 'Atualização'], rollbackPlan: 'Restaurar snapshot do banco de dados tirado antes da atualização.', maintenanceWindow: 'Sábado, 22/06/2025 - 02:00 às 04:00', approvers: [{id: 3, status: 'Pendente'}], viewingBy: [] },
+    { id: 'TKT-004', subject: 'Agendamento de consulta', clientName: 'Maria Oliveira', clientCompany: null, clientEmail: 'maria.o@email.com', clientPhone: null, clientSla: 'Bronze', status: 'Aberto', priority: 'Baixa', department: 'Geral', agentId: 3, type: 'Solicitação', channel: 'email', createdAt: new Date(new Date().setDate(new Date().getDate() - 3)), slaDue: addHours(new Date(), 48), sector: 'clinics', history: [{ user: 'Cliente', message: 'Quero marcar um retorno com o Dr. Carlos para a próxima semana. Agradeço a atenção.', sentiment: 'positive' }], tags: ['Agendamento', 'Consulta'], attachments: [], csatScore: null, viewingBy: [1, 3] },
+    { id: 'TKT-005', subject: 'Atraso na entrega do produto', clientName: 'Ana Costa', clientCompany: null, clientEmail: 'anac@email.com', clientPhone: '+55 81 91234-5678', clientSla: 'Prata', status: 'Aberto', priority: 'Média', department: 'Vendas', agentId: 3, type: 'Problema', channel: 'chat', createdAt: new Date(new Date().setDate(new Date().getDate() - 1)), slaDue: addHours(new Date(), -2), sector: 'retail', history: [{ user: 'Cliente', message: 'Meu pedido #54321 ainda não chegou e o prazo era ontem. Onde está meu produto?', sentiment: 'negative' }], tags: ['Entrega', 'Atraso', 'Logística'], attachments: [], csatScore: null, viewingBy: [] },
+    { id: 'TKT-006', subject: 'Como integrar o Facebook?', clientName: 'Agência Criativa', clientCompany: 'Agência Criativa', clientEmail: 'contato@criativa.mkt', clientPhone: null, clientSla: 'Bronze', status: 'Resolvido', priority: 'Baixa', department: 'Suporte Técnico N1', agentId: 1, type: 'Dúvida', channel: 'email', createdAt: new Date(new Date().setDate(new Date().getDate() - 4)), resolvedAt: new Date(new Date().setDate(new Date().getDate() - 3)), sector: 'marketing', history: [{ user: 'Cliente', message: 'Onde encontro a documentação para integrar com a API do Facebook?', sentiment: 'neutral' }], tags: ['Integração', 'Facebook', 'Documentação'], attachments: [], csatScore: 4, viewingBy: []},
+    { id: 'TKT-007', subject: 'Dúvida sobre plano de assinatura', clientName: 'Diretor de TI', clientCompany: 'Startup Inovadora', clientEmail: 'dev@inovadora.io', clientPhone: '+55 21 99999-8888', clientSla: 'Ouro', status: 'Resolvido', priority: 'Baixa', department: 'Vendas', agentId: 2, type: 'Dúvida', channel: 'email', createdAt: new Date(new Date().setDate(new Date().getDate() - 15)), resolvedAt: new Date(new Date().setDate(new Date().getDate() - 15)), sector: 'software', history: [{ user: 'Cliente', message: 'Olá, qual a diferença entre o plano Pro e o Enterprise?', sentiment: 'neutral' }], tags: ['Assinatura', 'Preços'], attachments: [], csatScore: 5, viewingBy: [] },
+    { id: 'TKT-008', subject: 'Cobrança indevida na fatura', clientName: 'Gerente Financeiro', clientCompany: 'Global Corp', clientEmail: 'financeiro@global.corp', clientPhone: null, clientSla: 'Ouro', status: 'Resolvido', priority: 'Média', department: 'Financeiro', agentId: 2, type: 'Problema', channel: 'email', createdAt: new Date(new Date().setDate(new Date().getDate() - 5)), resolvedAt: new Date(new Date().setDate(new Date().getDate() - 4)), sector: 'software', history: [{ user: 'Cliente', message: 'Veio uma cobrança duplicada na minha fatura deste mês.', sentiment: 'negative' }], tags: ['Faturamento', 'Cobrança'], attachments: [{ name: 'fatura.pdf', size: '450KB' }], csatScore: 3, viewingBy: [] }
+];
+
+const CUSTOMER_INTERACTIONS = {
+    'dev@inovadora.io': [
+        { type: 'purchase', timestamp: new Date(new Date().setDate(new Date().getDate() - 30)), details: 'Plano Pro Anual', icon: ShoppingCart },
+        { type: 'visit', timestamp: new Date(new Date().setDate(new Date().getDate() - 3)), details: 'Visitou a página de preços', icon: MousePointerClick },
+    ]
+};
+
+const PROJECTS = [
+    {id: 'PROJ-01', name: 'Otimização de Performance da API v2', tasks: [{id: 1, name: 'Analisar query de usuários', linkedTicket: 'PRB-001', status: 'Em andamento'}]}
+];
+
+const MACROS = [ { id: 1, name: 'Escalar para Suporte N2', actions: { department: 'Suporte Técnico N2', priority: 'Alta', tagsToAdd: ['Escalado', 'N2'] } }, { id: 2, name: 'Solicitar Info de Pagamento', actions: { status: 'Pendente', tagsToAdd: ['Aguardando-Cliente', 'Financeiro'], internalNote: 'Solicitado comprovante de pagamento ao cliente.' } }, { id: 3, name: 'Fechar e pedir CSAT', actions: { status: 'Resolvido' } } ];
+const knowledgeBaseArticles = [  { id: 1, title: 'Como criar uma campanha de sucesso no Facebook Ads', category: 'Marketing Digital', sector: 'marketing', keywords: ['facebook', 'ads', 'campanha'] }, { id: 2, title: 'Documentação necessária para um contrato de locação', category: 'Processos', sector: 'real_estate', keywords: ['contrato', 'documento', 'locação'] }, { id: 3, title: 'Guia de Troubleshooting da API v1', category: 'Guias Técnicos', sector: 'software', keywords: ['api', 'erro', '500', 'bug'] }, { id: 4, title: 'Como agendar sua consulta online', category: 'Guias do Paciente', sector: 'clinics', keywords: ['agendamento', 'consulta', 'marcar'] }];
+
+// --- COMPONENTES AUXILIARES ---
+const StatCard = ({ title, value, icon, color }) => (<div className={`p-5 rounded-2xl shadow-lg flex items-center space-x-4 bg-gradient-to-br ${color}`}><div className="text-white p-3 bg-white bg-opacity-20 rounded-full">{icon}</div><div><p className="text-white text-base font-semibold">{title}</p><p className="text-white text-3xl font-bold">{value}</p></div></div>);
+const UserProfile = ({ userSector }) => (<div className="relative flex items-center space-x-3 cursor-pointer group"><div className="w-10 h-10 bg-blue-200 rounded-full flex items-center justify-center text-lg font-bold text-blue-800">AB</div><div><p className="font-semibold text-gray-800">Ana Beatriz</p><p className="text-sm text-gray-500">{SECTORS[userSector]}</p></div><ChevronDown className="text-gray-500 group-hover:text-blue-600" size={20} /></div>);
+const TabNavigation = ({ currentView, setCurrentView }) => { const navItems = [{ id: 'dashboard', label: 'Dashboard', icon: BarChart2 }, { id: 'tickets', label: 'Tickets', icon: MessageSquare }, {id: 'projects', label: 'Projetos', icon: FolderKanban }, { id: 'knowledge_base', label: 'Base de Conhecimento', icon: Book }, { id: 'reports', label: 'Relatórios', icon: BarChart2 }]; return (<nav className="bg-white px-8 border-b border-gray-200"><div className="flex space-x-2">{navItems.map(item => (<button key={item.id} onClick={() => setCurrentView(item.id)} className={`flex items-center py-4 px-3 border-b-2 transition-all duration-200 focus:outline-none ${currentView === item.id ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-gray-500 hover:text-blue-600 hover:border-blue-300'}`}><item.icon size={18} className="mr-2" /><span>{item.label}</span></button>))}</div></nav>);};
+
+const tagColorClasses = [ 'bg-blue-100 text-blue-800', 'bg-green-100 text-green-800', 'bg-yellow-100 text-yellow-800', 'bg-purple-100 text-purple-800', 'bg-pink-100 text-pink-800', 'bg-indigo-100 text-indigo-800', 'bg-teal-100 text-teal-800', 'bg-red-100 text-red-800' ];
+const getTagColor = (tag) => { let hash = 0; for (let i = 0; i < tag.length; i++) { hash = tag.charCodeAt(i) + ((hash << 5) - hash); } const index = Math.abs(hash % tagColorClasses.length); return tagColorClasses[index]; };
+const formatTime = (totalSeconds) => { const hours = Math.floor(totalSeconds / 3600); const minutes = Math.floor((totalSeconds % 3600) / 60); const seconds = totalSeconds % 60; return [hours, minutes, seconds].map(v => v < 10 ? "0" + v : v).join(':'); };
+
+// --- VIEWS PRINCIPAIS ---
+const Dashboard = ({ tickets, setCurrentView, setSelectedTicket }) => {
+    const openTickets = tickets.filter(t => t.status === 'Aberto').length;
+    const pendingTickets = tickets.filter(t => t.status === 'Pendente').length;
+    const slaBreaches = tickets.filter(t => t.status !== 'Resolvido' && t.slaDue && new Date(t.slaDue) < new Date()).length;
+    const resolvedWithCsat = tickets.filter(t => t.csatScore !== null);
+    const avgCsat = resolvedWithCsat.length > 0 ? (resolvedWithCsat.reduce((acc, t) => acc + t.csatScore, 0) / resolvedWithCsat.length).toFixed(1) : 'N/A';
+    const cardColors = { open: 'from-blue-500 to-blue-600', pending: 'from-sky-500 to-sky-600', sla: 'from-red-500 to-red-600', csat: 'from-green-500 to-green-600', highPriority: 'from-amber-500 to-amber-600' };
+    const recentTickets = [...tickets].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 5);
+    const handleTicketClick = (ticket) => { setSelectedTicket(ticket); setCurrentView('ticket_detail'); };
+    const aiInsight = useMemo(() => {
+        const tagCounts = tickets.reduce((acc, ticket) => { ticket.tags.forEach(tag => { acc[tag] = (acc[tag] || 0) + 1; }); return acc; }, {});
+        const mostFrequentTag = Object.keys(tagCounts).reduce((a, b) => tagCounts[a] > tagCounts[b] ? a : b, null);
+        if (mostFrequentTag && tagCounts[mostFrequentTag] > 2) { return `Notamos um volume alto de tickets com a tag "${mostFrequentTag}". Considere criar um artigo na Base de Conhecimento.`; }
+        return 'Nenhuma tendência significativa detectada nos últimos tickets. Mantenha o bom trabalho!';
+    }, [tickets]);
+
+    return (
+        <div className="p-8 space-y-8">
+            <h1 className="text-3xl font-bold text-gray-800">Dashboard Principal</h1>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6"><StatCard title="Tickets Abertos" value={openTickets} icon={<FileText size={24}/>} color={cardColors.open} /><StatCard title="Tickets Pendentes" value={pendingTickets} icon={<Kanban size={24}/>} color={cardColors.pending} /><StatCard title="Violações de SLA" value={slaBreaches} icon={<Clock size={24}/>} color={cardColors.sla} /><StatCard title="CSAT Médio" value={avgCsat} icon={<Star size={24}/>} color={cardColors.csat} /><StatCard title="Prioridade Alta" value={tickets.filter(t => t.priority === 'Alta' && t.status !== 'Resolvido').length} icon={<AlertTriangle size={24}/>} color={cardColors.highPriority} /></div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-lg"><h2 className="text-xl font-bold text-gray-800 mb-4">Tickets Recentes</h2><div className="overflow-x-auto"><table className="w-full text-left">
+                    <thead><tr className="border-b-2 border-gray-100"><th className="py-3 px-4 font-semibold text-gray-600">Assunto</th><th className="py-3 px-4 font-semibold text-gray-600">Agente</th><th className="py-3 px-4 font-semibold text-gray-600">Status</th><th className="py-3 px-4 font-semibold text-gray-600">SLA</th></tr></thead>
+                    <tbody>{recentTickets.map(ticket => {
+                        const slaBreached = ticket.slaDue && new Date(ticket.slaDue) < new Date();
+                        const agent = AGENTS.find(a => a.id === ticket.agentId);
+                        return (<tr key={ticket.id} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => handleTicketClick(ticket)}><td className="py-3 px-4 text-blue-600 font-medium">{ticket.subject}</td><td className="py-3 px-4 text-gray-600 flex items-center gap-2"><div className="w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center text-xs">{agent?.avatar}</div>{agent?.name}</td><td className="py-3 px-4"><span className={`px-3 py-1 text-sm rounded-full font-semibold ${ticket.status === 'Aberto' ? 'bg-red-100 text-red-700' : ticket.status === 'Pendente' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>{ticket.status}</span></td><td className={`py-3 px-4 font-semibold flex items-center gap-2 ${slaBreached ? 'text-red-500' : 'text-gray-500'}`}>{slaBreached && <Clock size={16}/>} {ticket.slaDue ? new Date(ticket.slaDue).toLocaleString() : 'N/A'}</td></tr>)
+                    })}</tbody>
+                </table></div></div>
+                 <div className="bg-blue-50 border-2 border-blue-200 p-6 rounded-2xl shadow-lg flex flex-col justify-center"><div className="flex items-center gap-4 mb-4"><div className="p-3 bg-blue-200 rounded-full"><Lightbulb className="text-blue-700" size={24}/></div><h2 className="text-xl font-bold text-blue-900">Insights da IA</h2></div><p className="text-blue-800">{aiInsight}</p></div>
+            </div>
+        </div>
+    );
+};
+
+const TicketList = ({ tickets, setTickets, setCurrentView, setSelectedTicket, setCreatingTicket }) => {
+    const [viewMode, setViewMode] = useState('list');
+    const [searchTerm, setSearchTerm] = useState('');
+    const [draggedTicketId, setDraggedTicketId] = useState(null);
+    const filteredTickets = tickets.filter(ticket => ticket.subject.toLowerCase().includes(searchTerm.toLowerCase()) || ticket.clientName.toLowerCase().includes(searchTerm.toLowerCase()) || ticket.id.toLowerCase().includes(searchTerm.toLowerCase()) || (ticket.tags && ticket.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))));
+    const handleTicketClick = (ticket) => { setSelectedTicket(ticket); setCurrentView('ticket_detail'); };
+    const handleDragStart = (e, ticketId) => { setDraggedTicketId(ticketId); e.dataTransfer.effectAllowed = 'move'; };
+    const handleDragOver = (e) => e.preventDefault();
+    const handleDragEnd = () => setDraggedTicketId(null);
+    const handleDrop = (e, newStatus) => { e.preventDefault(); const updatedTickets = tickets.map(ticket => ticket.id === draggedTicketId ? { ...ticket, status: newStatus } : ticket); setTickets(updatedTickets); setDraggedTicketId(null); };
+    const columns = {'Aberto': { id: 'Aberto', title: 'Abertos', color: 'bg-red-500' }, 'Pendente': { id: 'Pendente', title: 'Pendentes', color: 'bg-yellow-500' }, 'Resolvido': { id: 'Resolvido', title: 'Resolvidos', color: 'bg-green-500' }};
+
+    return (
+        <div className="p-8"><div className="flex justify-between items-center mb-6"><h1 className="text-3xl font-bold text-gray-800">Tickets</h1><div className="flex items-center space-x-4"><div className="relative"><Search size={20} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" /><input type="text" placeholder="Pesquisar..." className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/></div><div className="flex items-center bg-gray-200 p-1 rounded-lg"><button onClick={() => setViewMode('list')} className={`px-3 py-1 rounded-md ${viewMode === 'list' ? 'bg-white shadow' : ''}`}><LayoutList size={20} /></button><button onClick={() => setViewMode('kanban')} className={`px-3 py-1 rounded-md ${viewMode === 'kanban' ? 'bg-white shadow' : ''}`}><Kanban size={20} /></button></div><button onClick={() => setCreatingTicket(true)} className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-all"><PlusCircle size={20} className="mr-2"/>Novo Ticket</button></div></div>
+             {viewMode === 'list' ? (<div className="bg-white p-6 rounded-2xl shadow-lg"><table className="w-full text-left">
+                <thead><tr className="border-b-2 border-gray-100"><th className="p-4 font-semibold text-gray-600">Assunto</th><th className="p-4 font-semibold text-gray-600">Agente</th><th className="p-4 font-semibold text-gray-600">Status</th><th className="p-4 font-semibold text-gray-600">SLA</th><th className="p-4 font-semibold text-gray-600">Tags</th><th className="p-4 font-semibold text-gray-600"></th></tr></thead>
+                <tbody>{filteredTickets.map(ticket => {
+                    const slaBreached = ticket.slaDue && new Date(ticket.slaDue) < new Date();
+                    const agent = AGENTS.find(a => a.id === ticket.agentId);
+                    return (<tr key={ticket.id} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => handleTicketClick(ticket)}><td className="p-4 text-blue-600 font-medium">{ticket.subject}</td><td className="p-4 text-gray-600 flex items-center gap-2"><div className="w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center text-xs">{agent?.avatar}</div>{agent?.name}</td><td className="p-4"><span className={`px-3 py-1 text-sm rounded-full font-semibold ${ticket.status === 'Aberto' ? 'bg-red-100 text-red-700' : ticket.status === 'Pendente' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>{ticket.status}</span></td><td className={`p-4 font-semibold flex items-center gap-1 ${slaBreached && ticket.status !== 'Resolvido' ? 'text-red-500' : 'text-gray-500'}`}>{slaBreached && ticket.status !== 'Resolvido' && <Clock size={16}/>} {ticket.slaDue ? new Date(ticket.slaDue).toLocaleDateString() : 'N/A'}</td><td className="p-4 flex flex-wrap gap-1">{ticket.tags.map(tag => <span key={tag} className={`px-2 py-0.5 rounded text-xs font-semibold ${getTagColor(tag)}`}>{tag}</span>)}</td><td className="p-4"><div className="flex -space-x-2">{ticket.viewingBy.map(agentId => <div key={agentId} className="w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center text-xs ring-2 ring-white" title={AGENTS.find(a=>a.id===agentId)?.name}>{AGENTS.find(a=>a.id===agentId)?.avatar}</div>)}</div></td></tr>)
+                })}</tbody>
+            </table></div>) : (<div className="grid grid-cols-1 md:grid-cols-3 gap-6">{Object.values(columns).map(column => (<div key={column.id} onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, column.id)} className="bg-gray-100 p-4 rounded-xl flex flex-col"><div className="flex items-center mb-4"><span className={`w-3 h-3 rounded-full mr-2 ${column.color}`}></span><h3 className="font-bold text-gray-800">{column.title}</h3><span className="ml-2 bg-gray-200 text-gray-600 text-sm font-semibold px-2 py-0.5 rounded-full">{filteredTickets.filter(t => t.status === column.id).length}</span></div><div className="space-y-4 overflow-y-auto h-[60vh] p-1">{filteredTickets.filter(t => t.status === column.id).map((ticket) => { const agent = AGENTS.find(a => a.id === ticket.agentId); const ChannelIcon = CHANNELS[ticket.channel]?.icon; return ( <div key={ticket.id} draggable onDragStart={(e) => handleDragStart(e, ticket.id)} onDragEnd={handleDragEnd} onClick={() => handleTicketClick(ticket)} className={`bg-white p-4 rounded-lg shadow-md cursor-grab ${draggedTicketId === ticket.id ? 'opacity-50' : ''}`}><p className="font-semibold text-gray-800 mb-2">{ticket.subject}</p><div className="flex flex-wrap gap-1 mb-2">{ticket.tags.map(tag => <span key={tag} className={`px-2 py-0.5 rounded text-xs font-semibold ${getTagColor(tag)}`}>{tag}</span>)}</div><div className="flex justify-between items-center text-sm"><span className="text-gray-500">{ticket.clientName}</span><span className={`font-semibold ${ticket.priority === 'Alta' ? 'text-red-600' : 'text-yellow-600'}`}>{ticket.priority}</span></div><div className="flex justify-between items-center mt-3 pt-2 border-t"><div className="flex items-center gap-2 text-gray-500"><ChannelIcon size={14} /> <Timer size={14}/> {formatTime(ticket.timeTracked)}</div><div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center text-sm ring-2 ring-white" title={agent?.name}>{agent?.avatar}</div></div></div>)})}</div></div>))}</div>)}
+        </div>
+    );
+};
+
+const Countdown = ({ toDate }) => {
+    const calculateTimeLeft = () => { if(!toDate) return {}; const difference = +new Date(toDate) - +new Date(); let timeLeft = {}; if (difference > 0) { timeLeft = { d: Math.floor(difference / (1000 * 60 * 60 * 24)), h: Math.floor((difference / (1000 * 60 * 60)) % 24), m: Math.floor((difference / 1000 / 60) % 60) }; } return timeLeft; };
+    const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
+    useEffect(() => { const timer = setTimeout(() => { setTimeLeft(calculateTimeLeft()); }, 60000); return () => clearTimeout(timer); });
+    if(!toDate) return <span className="text-gray-500">N/A</span>;
+    const isBreached = +new Date(toDate) < +new Date();
+    if (isBreached) return <span className="text-red-500 font-bold flex items-center gap-1"><Clock size={14}/>SLA Violado</span>;
+    return <span className="text-gray-600 font-bold">{timeLeft.d > 0 && `${timeLeft.d}d `}{timeLeft.h > 0 && `${timeLeft.h}h `}{`${timeLeft.m}m restantes`}</span>;
+};
+
+const SentimentIcon = ({ sentiment }) => {
+    if (sentiment === 'positive') return <Smile size={16} className="text-green-500" />;
+    if (sentiment === 'negative') return <Frown size={16} className="text-red-500" />;
+    return <Meh size={16} className="text-gray-500" />;
+};
+
+
+const TicketDetail = ({ ticket, onBack, setTickets, allTickets, onViewCustomerHistory }) => {
+    const [newMessage, setNewMessage] = useState('');
+    const [isInternalNote, setIsInternalNote] = useState(false);
+    const [isTyping, setIsTyping] = useState(false);
+    const [aiSuggestion, setAiSuggestion] = useState('');
+    const [isLoadingAi, setIsLoadingAi] = useState(false);
+    const [showSummary, setShowSummary] = useState(false);
+    const [isTimerActive, setIsTimerActive] = useState(false);
+    const [timeTracked, setTimeTracked] = useState(ticket.timeTracked || 0);
+
+    useEffect(() => {
+        let interval;
+        if (isTimerActive) {
+            interval = setInterval(() => {
+                setTimeTracked(prevTime => prevTime + 1);
+            }, 1000);
+        }
+        return () => clearInterval(interval);
+    }, [isTimerActive]);
+
+    const handleTimerToggle = () => {
+        const newIsActive = !isTimerActive;
+        setIsTimerActive(newIsActive);
+        if (!newIsActive) { // On pause
+            setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, timeTracked } : t));
+        }
+    };
+
+
+    useEffect(() => { setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, viewingBy: [...new Set([...t.viewingBy, CURRENT_USER_ID])] } : t)); return () => { setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, viewingBy: t.viewingBy.filter(id => id !== CURRENT_USER_ID) } : t)); }; }, [ticket.id, setTickets]);
+    useEffect(() => { let typingTimeout; if(newMessage.length > 0) { setIsTyping(true); typingTimeout = setTimeout(() => { setIsTyping(false); }, 2000); } else { setIsTyping(false); } return () => clearTimeout(typingTimeout); }, [newMessage]);
+
+    const handleUpdateTicketField = (field, value, tagsToAdd = []) => {
+        const isResolution = field === 'status' && value === 'Resolvido';
+        setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, [field]: value, ...(isResolution && { resolvedAt: new Date() }), tags: [...new Set([...t.tags, ...tagsToAdd])] } : t));
+    };
+    
+    const applyMacro = (macroId) => {
+        const macro = MACROS.find(m => m.id === macroId);
+        if (!macro) return;
+        
+        let updatedTicket = { ...ticket };
+        for (const [key, value] of Object.entries(macro.actions)) {
+            if (key === 'tagsToAdd') {
+                updatedTicket.tags = [...new Set([...updatedTicket.tags, ...value])];
+            } else if (key === 'internalNote') {
+                updatedTicket.history.push({ user: 'Sistema (Macro)', message: value, timestamp: new Date(), sentiment: 'neutral' });
+            } else {
+                updatedTicket[key] = value;
+            }
+        }
+        if (macro.actions.status === 'Resolvido') updatedTicket.resolvedAt = new Date();
+        setTickets(prev => prev.map(t => t.id === ticket.id ? updatedTicket : t));
+    };
+    
+    const handleSetCsat = (score) => { setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, csatScore: score } : t)); };
+    const handleSendMessage = () => { if (!newMessage.trim()) return; const newHistoryEntry = { user: 'Ana Beatriz', message: newMessage, timestamp: new Date().toISOString() }; setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, history: [...t.history, newHistoryEntry] } : t)); setNewMessage(''); };
+    const generateAiReply = () => { setIsLoadingAi(true); setAiSuggestion(''); setTimeout(() => { const reply = `Olá ${ticket.clientName.split(' ')[0]},\n\nObrigado por seu contato sobre "${ticket.subject}". Verifiquei as informações e já estou tratando sua solicitação. Retornarei o mais breve possível.\n\nAtenciosamente,\nAna Beatriz`; setAiSuggestion(reply); setIsLoadingAi(false); }, 1500); };
+    
+    const similarTickets = useMemo(() => allTickets.filter(otherTicket => otherTicket.id !== ticket.id && otherTicket.tags.some(tag => ticket.tags.includes(tag))).slice(0, 3), [allTickets, ticket]);
+    const linkedIncidents = useMemo(() => ticket.type === 'Problema' ? allTickets.filter(t => t.linkedProblemId === ticket.id) : [], [allTickets, ticket]);
+    const aiSummary = useMemo(() => `Este ticket, aberto por ${ticket.clientName}, trata sobre "${ticket.subject}". O cliente reportou o problema em ${new Date(ticket.createdAt).toLocaleString()}. A conversa envolveu ${ticket.history.length} interações. O status atual é ${ticket.status}.`, [ticket]);
+    
+    return (
+        <div className="p-8">
+            <div className="flex justify-between items-center mb-6">
+                <button onClick={onBack} className="text-blue-600 hover:text-blue-800 font-semibold">&larr; Voltar para a lista de tickets</button>
+                <div className="flex items-center gap-4">
+                    <div className="relative group"><button className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded-md text-gray-700 font-semibold"><PlayCircle size={16}/> Macros</button><div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg z-10 opacity-0 group-hover:opacity-100 transition-opacity invisible group-hover:visible">{MACROS.map(macro => <button key={macro.id} onClick={() => applyMacro(macro.id)} className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">{macro.name}</button>)}</div></div>
+                    <div className="flex items-center gap-2 text-sm text-gray-500"><span>Visualizando:</span><div className="flex -space-x-2">{ticket.viewingBy.map(agentId => <div key={agentId} className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center text-xs ring-2 ring-white" title={AGENTS.find(a=>a.id===agentId)?.name}>{AGENTS.find(a=>a.id===agentId)?.avatar}</div>)}</div></div>
+                </div>
+            </div>
+            <div className="flex flex-col lg:flex-row gap-6">
+                 {/* Conteúdo principal */}
+                <div className="flex-grow bg-white p-6 rounded-2xl shadow-lg"><h1 className="text-3xl font-bold text-gray-800 mb-2">{ticket.subject}</h1><p className="text-gray-500 mb-6">Ticket <span className="font-semibold text-blue-600">#{ticket.id}</span></p>
+                    {ticket.type === 'Problema' && (
+                        <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                            <h4 className="font-bold text-amber-800 mb-2">Análise de Problema</h4>
+                            <div className="space-y-2 text-sm"><p><strong>Causa Raiz:</strong> {ticket.rootCause || 'Em investigação...'}</p><p><strong>Solução de Contorno:</strong> {ticket.workaround || 'Nenhuma definida.'}</p></div>
+                             <h5 className="font-semibold text-gray-700 mt-4 mb-2">Incidentes Vinculados ({linkedIncidents.length})</h5>
+                             <div className="max-h-32 overflow-y-auto space-y-2">{linkedIncidents.map(inc => <div key={inc.id} className="p-2 bg-gray-100 rounded text-xs">{inc.subject}</div>)}</div>
+                        </div>
+                    )}
+                    {ticket.type === 'Mudança (RFC)' && (
+                         <div className="mb-6 p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
+                             <h4 className="font-bold text-indigo-800 mb-2">Detalhes da Mudança</h4>
+                             <div className="space-y-2 text-sm"><p><strong>Janela de Manutenção:</strong> {ticket.maintenanceWindow}</p><p><strong>Plano de Rollback:</strong> {ticket.rollbackPlan}</p></div>
+                         </div>
+                    )}
+                    <div className="space-y-6 max-h-[50vh] overflow-y-auto pr-4 mb-6">{ticket.history.map((item, index) => {
+                       const itemAgent = AGENTS.find(a => a.name === item.user);
+                       return (<div key={index} className={`flex items-start gap-4 ${item.user !== 'Cliente' ? 'pl-8 border-l-4 border-blue-200' : ''}`}><div className={`w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-lg font-bold ${item.user === 'Cliente' ? 'bg-gray-200 text-gray-700' : 'bg-blue-200 text-blue-800'}`}>{itemAgent ? itemAgent.avatar : item.user.charAt(0)}</div><div className="flex-grow"><div className="flex items-center space-x-2"><p className="font-semibold">{item.user}</p><p className="text-xs text-gray-400">{new Date(item.timestamp).toLocaleString()}</p><SentimentIcon sentiment={item.sentiment} /></div><p className="text-gray-700 mt-1 whitespace-pre-wrap">{item.message}</p></div></div>)})}
+                       {isTyping && <div className="flex items-start gap-4 pl-8"><div className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-lg font-bold bg-blue-200 text-blue-800">{AGENTS.find(a => a.id === CURRENT_USER_ID)?.avatar}</div><div className="flex-grow"><p className="font-semibold">{AGENTS.find(a => a.id === CURRENT_USER_ID)?.name}</p><div className="flex items-center gap-1 mt-1"><div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></div><div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce delay-75"></div><div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce delay-150"></div></div></div></div>}
+                    </div>
+                    {ticket.status === 'Resolvido' && ( <div className="my-6 p-4 bg-green-50 border border-green-200 rounded-lg"><h4 className="font-bold text-green-800 mb-2">Avaliação do Cliente</h4>{ticket.csatScore ? (<div className="flex items-center gap-2"><p className="font-semibold text-lg text-green-700">Nota: {ticket.csatScore}</p><div className="flex">{[...Array(5)].map((_, i) => <Star key={i} size={20} className={i < ticket.csatScore ? "text-yellow-400 fill-current" : "text-gray-300"} />)}</div></div>) : (<div><p className="text-gray-600 mb-2">Aguardando avaliação do cliente.</p><div className="flex gap-1">{[...Array(5)].map((_, i) => <button key={i} onClick={() => handleSetCsat(i + 1)}><Star size={24} className="text-gray-300 hover:text-yellow-400 transition-colors"/></button>)}</div></div>)}</div>)}
+                    {ticket.status !== 'Resolvido' && ( <div className="mt-8 border-t pt-6"><div className="flex space-x-2 mb-2"><button onClick={() => setIsInternalNote(false)} className={`px-4 py-2 rounded-t-lg ${!isInternalNote ? 'bg-white border-b-2 border-blue-600 font-semibold text-blue-600' : 'bg-gray-100 text-gray-600'}`}>Resposta Pública</button><button onClick={() => setIsInternalNote(true)} className={`px-4 py-2 rounded-t-lg ${isInternalNote ? 'bg-yellow-100 border-b-2 border-yellow-500 font-semibold text-yellow-700' : 'bg-gray-100 text-gray-600'}`}>Nota Interna</button></div><div className={`p-4 rounded-b-lg rounded-tr-lg border ${isInternalNote ? 'bg-yellow-50 border-yellow-200' : 'bg-white border-gray-200'}`}><textarea value={newMessage} onChange={e => setNewMessage(e.target.value)} className={`w-full p-2 border rounded-md h-28 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${isInternalNote ? 'bg-yellow-50' : 'bg-white'}`} placeholder={isInternalNote ? 'Adicione uma nota interna (visível apenas para a equipe)...' : 'Digite sua resposta para o cliente...'}></textarea>{aiSuggestion && (<div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md"><p className="text-sm font-semibold text-blue-800 mb-1">Sugestão da IA:</p><p className="text-sm text-blue-700 whitespace-pre-wrap">{aiSuggestion}</p><button onClick={() => { setNewMessage(aiSuggestion); setAiSuggestion(''); }} className="mt-2 text-xs bg-blue-500 text-white px-2 py-1 rounded">Usar esta sugestão</button></div>)}<div className="flex justify-between items-center mt-4"><button onClick={generateAiReply} disabled={isLoadingAi} className="flex items-center space-x-2 text-blue-600 font-semibold hover:bg-blue-100 px-3 py-2 rounded-lg transition-all disabled:opacity-50"><BrainCircuit size={20}/><span>{isLoadingAi ? 'Gerando...' : 'Gerar Resposta com IA'}</span></button><button onClick={handleSendMessage} className="bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-all">Enviar</button></div></div></div>)}
+                </div>
+                <div className="w-full lg:w-96 flex-shrink-0 space-y-6">
+                    <div className="bg-white p-6 rounded-2xl shadow-lg"><h3 className="font-bold text-lg text-gray-800 mb-4">Propriedades</h3><div className="space-y-4 text-sm">
+                       <div className="flex justify-between items-center"><span className="text-gray-500">Status:</span><select value={ticket.status} onChange={(e) => handleUpdateTicketField('status', e.target.value)} className="font-semibold text-gray-800 rounded-md border-gray-200 border p-1"><option>Aberto</option><option>Pendente</option><option>Resolvido</option></select></div>
+                       <div className="flex justify-between items-center"><span className="text-gray-500">Agente:</span><select value={ticket.agentId} onChange={(e) => handleUpdateTicketField('agentId', parseInt(e.target.value))} className="font-semibold text-gray-800 rounded-md border-gray-200 border p-1">{AGENTS.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+                       <div className="flex justify-between items-center"><span className="text-gray-500">Prioridade:</span><select value={ticket.priority} onChange={(e) => handleUpdateTicketField('priority', e.target.value)} className="font-semibold text-gray-800 rounded-md border-gray-200 border p-1"><option>Baixa</option><option>Média</option><option>Alta</option></select></div>
+                       <div className="flex justify-between items-center"><span className="text-gray-500">Departamento:</span><select value={ticket.department} onChange={(e) => handleUpdateTicketField('department', e.target.value)} className="font-semibold text-gray-800 rounded-md border-gray-200 border p-1">{DEPARTMENTS.map(d => <option key={d}>{d}</option>)}</select></div>
+                       <div><h4 className="text-gray-500 mb-1">Tags:</h4><div className="flex flex-wrap gap-1">{ticket.tags.map(tag => <span key={tag} className="bg-gray-200 text-gray-700 px-2 py-0.5 rounded text-xs">{tag}</span>)}</div></div>
+                    </div></div>
+                    <div className="bg-white p-6 rounded-2xl shadow-lg"><h3 className="font-bold text-lg text-gray-800 mb-4">Métricas de Desempenho</h3><div className="space-y-4 text-sm">
+                       <div className="flex justify-between items-center"><span className="text-gray-500">Prazo de SLA:</span><Countdown toDate={ticket.slaDue} /></div>
+                       <div className="flex justify-between items-center"><span className="text-gray-500">Tempo Trabalhado:</span> <span className="font-bold text-gray-800">{formatTime(timeTracked)}</span></div>
+                       <button onClick={handleTimerToggle} className={`w-full flex justify-center items-center gap-2 px-3 py-2 rounded-md font-semibold text-white transition-colors ${isTimerActive ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`}> {isTimerActive ? <PauseCircle size={16}/> : <PlayCircle size={16}/>} {isTimerActive ? 'Pausar Cronómetro' : 'Iniciar Cronómetro'} </button>
+                    </div></div>
+                    <div className="bg-white p-6 rounded-2xl shadow-lg"><h3 className="font-bold text-lg text-gray-800 mb-4">Informações do Cliente</h3><div className="space-y-2 text-sm">
+                        <p className="font-semibold text-gray-800">{ticket.clientName}</p>
+                        {ticket.clientCompany && <p className="text-gray-600 flex items-center gap-2"><Building size={14}/> {ticket.clientCompany}</p>}
+                        <p className="text-blue-600 hover:underline cursor-pointer flex items-center gap-2"><Mail size={14}/>{ticket.clientEmail}</p>
+                        {ticket.clientPhone && <p className="text-gray-600 flex items-center gap-2"><Phone size={14}/> {ticket.clientPhone}</p>}
+                        <button onClick={() => onViewCustomerHistory(ticket.clientEmail)} className="text-sm font-semibold text-blue-600 hover:text-blue-800 pt-1">Ver histórico completo &rarr;</button>
+                    </div></div>
+                    <div className="bg-white p-6 rounded-2xl shadow-lg"><h3 className="font-bold text-lg text-gray-800 mb-4 flex items-center gap-2"><BrainCircuit size={20} /> Assistente IA</h3>
+                        <button onClick={() => setShowSummary(true)} className="w-full text-left p-3 bg-blue-50 hover:bg-blue-100 rounded-lg text-blue-800 font-semibold mb-4">Resumir Histórico do Ticket</button>
+                         {showSummary && <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowSummary(false)}><div className="bg-white p-6 rounded-lg shadow-xl max-w-lg" onClick={e => e.stopPropagation()}><h4 className="font-bold mb-2">Resumo da IA</h4><p>{aiSummary}</p></div></div>}
+                        <h4 className="font-semibold text-gray-700 mt-4 mb-2">Tickets Similares Resolvidos</h4><div className="space-y-2">{similarTickets.length > 0 ? similarTickets.map(st => ( <div key={st.id} className="p-3 bg-gray-100 rounded-lg text-sm"><p className="font-semibold text-gray-800 truncate">{st.subject}</p><p className="text-gray-500">Resolvido por: {AGENTS.find(a => a.id === st.agentId)?.name || 'N/A'}</p></div>)) : <p className="text-sm text-gray-500">Nenhum ticket similar encontrado.</p>}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const NewTicketForm = ({ onSave, onCancel, userSector }) => {
+    const [isVisible, setIsVisible] = useState(false);
+    const [subject, setSubject] = useState('');
+    const [description, setDescription] = useState('');
+    const [priority, setPriority] = useState('Média');
+    const [clientName, setClientName] = useState('');
+    const [department, setDepartment] = useState('Geral');
+    const [tags, setTags] = useState('');
+    const [type, setType] = useState('Dúvida');
+    const [channel, setChannel] = useState('email');
+    const [agentId, setAgentId] = useState(AGENTS[0].id);
+    const [aiIsThinking, setAiIsThinking] = useState(false);
+
+    useEffect(() => { setIsVisible(true); }, []);
+    const handleCancel = () => { setIsVisible(false); setTimeout(onCancel, 300); };
+    
+    useEffect(() => {
+        if (description.length < 20) return;
+        setAiIsThinking(true);
+        const timeoutId = setTimeout(() => {
+            let suggestedPriority = 'Média', suggestedType = 'Dúvida', suggestedTags = [], suggestedDept = 'Geral';
+            if (description.toLowerCase().includes('urgente') || description.toLowerCase().includes('parado') || description.toLowerCase().includes('não funciona')) { suggestedPriority = 'Alta'; suggestedType = 'Incidente'; suggestedTags.push('Crítico'); }
+            if (description.toLowerCase().includes('api') || description.toLowerCase().includes('bug') || description.toLowerCase().includes('erro')) { suggestedDept = 'Suporte Técnico N1'; suggestedType = 'Problema'; suggestedTags.push('Bug'); }
+            if (description.toLowerCase().includes('pagamento') || description.toLowerCase().includes('fatura') || description.toLowerCase().includes('cobrança')) { suggestedDept = 'Financeiro'; suggestedType = 'Solicitação'; suggestedTags.push('Faturamento'); }
+            if (description.toLowerCase().includes('como fazer') || description.toLowerCase().includes('onde encontro')) { suggestedPriority = 'Baixa'; suggestedType = 'Dúvida'; }
+            setDepartment(suggestedDept); setPriority(suggestedPriority); setType(suggestedType); setTags(prev => [...new Set([...prev.split(',').map(t=>t.trim()), ...suggestedTags])].filter(Boolean).join(', '));
+            setAiIsThinking(false);
+        }, 1200);
+        return () => clearTimeout(timeoutId);
+    }, [description]);
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        const newTicket = { id: `TKT-${String(Date.now()).slice(-5)}`, subject, clientName, status: 'Aberto', priority, department, agentId, type, channel, createdAt: new Date(), slaDue: addHours(new Date(), priority === 'Alta' ? 4 : 24), sector: userSector, history: [{ user: 'Cliente', message: `Ticket aberto via ${channel}: ${description}`, timestamp: new Date() }], tags: tags.split(',').map(t => t.trim()).filter(Boolean), attachments: [], csatScore: null, viewingBy: [], timeTracked: 0 };
+        handleCancel(); setTimeout(() => onSave(newTicket), 300);
+    };
+
+    return ( <div className="fixed inset-0 z-50"><div className={`fixed inset-0 bg-black transition-opacity duration-300 ${isVisible ? 'bg-opacity-50' : 'bg-opacity-0'}`} onClick={handleCancel}></div><div className={`fixed top-0 right-0 h-full w-full bg-white shadow-2xl transition-transform duration-300 ease-in-out md:w-1/2 lg:w-2/5 ${isVisible ? 'translate-x-0' : 'translate-x-full'}`}><div className="flex h-full flex-col"><div className="flex justify-between items-center p-6 border-b shrink-0"><h2 className="text-2xl font-bold text-gray-800">Criar Novo Ticket</h2><button onClick={handleCancel} className="p-2 rounded-full hover:bg-gray-100"><X size={24} className="text-gray-600"/></button></div><form onSubmit={handleSubmit} className="flex-grow overflow-y-auto"><div className="p-6 space-y-6"><fieldset><legend className="text-lg font-semibold text-gray-800 mb-4">Detalhes do Cliente</legend><div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4"><div><label className="block text-sm font-medium text-gray-700 mb-1">Nome do Cliente</label><input type="text" value={clientName} onChange={e => setClientName(e.target.value)} required className="w-full p-2 border border-gray-300 rounded-lg" /></div><div><label className="block text-sm font-medium text-gray-700 mb-1">Canal de Origem</label><select value={channel} onChange={e => setChannel(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg bg-white">{Object.keys(CHANNELS).map(c => <option key={c} value={c}>{CHANNELS[c].name}</option>)}</select></div></div></fieldset><fieldset><legend className="text-lg font-semibold text-gray-800 mb-4">Descrição do Ticket</legend><div className="space-y-4"><div><label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Solicitação</label><select value={type} onChange={e => setType(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg bg-white">{TICKET_TYPES.map(t => <option key={t}>{t}</option>)}</select></div><div><label className="block text-sm font-medium text-gray-700 mb-1">Assunto</label><input type="text" value={subject} onChange={e => setSubject(e.target.value)} required className="w-full p-2 border border-gray-300 rounded-lg" /></div><div><label className="block text-sm font-medium text-gray-700 mb-1">Descrição Detalhada</label><textarea value={description} onChange={e => setDescription(e.target.value)} required rows="6" className="w-full p-2 border border-gray-300 rounded-lg" placeholder="Descreva o problema ou dúvida do cliente aqui..."></textarea></div></div></fieldset><div className="p-4 bg-blue-50 border-2 border-dashed border-blue-200 rounded-lg"><h4 className="font-semibold text-blue-800 mb-2 flex items-center gap-2">Triagem Automática por IA {aiIsThinking && <BrainCircuit size={16} className="animate-pulse text-blue-600"/>}</h4><div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4"><div><label className="block text-sm font-medium text-gray-700 mb-1">Departamento</label><select value={department} onChange={e => setDepartment(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg bg-white">{DEPARTMENTS.map(d => <option key={d}>{d}</option>)}</select></div><div><label className="block text-sm font-medium text-gray-700 mb-1">Prioridade</label><select value={priority} onChange={e => setPriority(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg bg-white"><option>Baixa</option><option>Média</option><option>Alta</option></select></div><div><label className="block text-sm font-medium text-gray-700 mb-1">Tags Sugeridas</label><input type="text" value={tags} onChange={e => setTags(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg" /></div></div></div><fieldset><legend className="text-lg font-semibold text-gray-800 mb-4">Atribuição e Anexos</legend><div className="space-y-4"><div><label className="block text-sm font-medium text-gray-700 mb-1">Atribuir a</label><select value={agentId} onChange={e => setAgentId(parseInt(e.target.value))} className="w-full p-2 border border-gray-300 rounded-lg bg-white">{AGENTS.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div><div><label className="block text-sm font-medium text-gray-700 mb-1">Anexos</label><div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md"><div className="space-y-1 text-center"><UploadCloud className="mx-auto h-12 w-12 text-gray-400" /><div className="flex text-sm text-gray-600"><p className="pl-1">Arraste e solte ou <button type="button" className="font-medium text-blue-600 hover:text-blue-500">clique para enviar</button></p></div><p className="text-xs text-gray-500">PNG, JPG, PDF até 10MB</p></div></div></div></div></fieldset></div></form><div className="p-6 bg-gray-50 border-t shrink-0"><div className="flex justify-end space-x-4"><button type="button" onClick={handleCancel} className="px-6 py-2 rounded-lg border border-gray-300 text-gray-700 font-semibold hover:bg-gray-100">Cancelar</button><button type="button" onClick={handleSubmit} className="px-6 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700">Criar Ticket</button></div></div></div></div></div> );
+};
+
+const KnowledgeBase = ({ articles }) => {
+    const [searchTerm, setSearchTerm] = useState('');
+    const filteredArticles = articles.filter(a => a.title.toLowerCase().includes(searchTerm.toLowerCase()) || a.category.toLowerCase().includes(searchTerm.toLowerCase()));
+    return (<div className="p-8"><h1 className="text-3xl font-bold text-gray-800 mb-2">Base de Conhecimento</h1><p className="text-gray-500 mb-6">Encontre respostas e tutoriais para resolver problemas rapidamente.</p><div className="relative mb-8 max-w-lg"><Search size={22} className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-400" /><input type="text" placeholder="Faça uma busca inteligente por título ou categoria..." className="w-full pl-12 pr-4 py-3 border-2 border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div><div className="space-y-6">{filteredArticles.map(article => (<div key={article.id} className="bg-white p-6 rounded-xl shadow-lg hover:shadow-xl transition-shadow cursor-pointer"><p className="text-sm font-semibold text-blue-600 mb-1">{article.category}</p><h2 className="text-xl font-bold text-gray-800">{article.title}</h2></div>))}</div></div>);
+};
+
+const CustomerHistoryPanel = ({ customerEmail, allTickets, onClose, onTicketSelect }) => {
+    const [isVisible, setIsVisible] = useState(false);
+
+    useEffect(() => { setIsVisible(true); }, []);
+
+    const handleClose = () => { setIsVisible(false); setTimeout(onClose, 300); };
+    
+    const customerTickets = useMemo(() => {
+        return allTickets.filter(t => t.clientEmail === customerEmail).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+    }, [allTickets, customerEmail]);
+
+    const customerName = customerTickets.length > 0 ? customerTickets[0].clientName : customerEmail;
+    
+    const customerCSAT = useMemo(() => {
+        const ratedTickets = customerTickets.filter(t => t.csatScore !== null);
+        if (ratedTickets.length === 0) return 'N/A';
+        const avg = ratedTickets.reduce((acc, t) => acc + t.csatScore, 0) / ratedTickets.length;
+        return avg.toFixed(1);
+    }, [customerTickets]);
+
+    return (
+        <div className="fixed inset-0 z-50">
+            <div className={`fixed inset-0 bg-black transition-opacity duration-300 ${isVisible ? 'bg-opacity-50' : 'bg-opacity-0'}`} onClick={handleClose}></div>
+            <div className={`fixed top-0 right-0 h-full w-full bg-white shadow-2xl transition-transform duration-300 ease-in-out md:w-3/5 lg:w-1/2 ${isVisible ? 'translate-x-0' : 'translate-x-full'}`}>
+                <div className="flex h-full flex-col">
+                    <div className="flex justify-between items-center p-6 border-b shrink-0">
+                        <div>
+                            <h2 className="text-2xl font-bold text-gray-800">Histórico de {customerName}</h2>
+                            <p className="text-sm text-gray-500">{customerEmail}</p>
+                        </div>
+                        <button onClick={handleClose} className="p-2 rounded-full hover:bg-gray-100"><X size={24} className="text-gray-600"/></button>
+                    </div>
+                    <div className="flex-grow overflow-y-auto p-6">
+                        <div className="grid grid-cols-2 gap-4 mb-6 text-center">
+                           <div className="bg-gray-100 p-4 rounded-lg"><p className="text-sm text-gray-600">Total de Tickets</p><p className="text-2xl font-bold text-gray-800">{customerTickets.length}</p></div>
+                           <div className="bg-gray-100 p-4 rounded-lg"><p className="text-sm text-gray-600">CSAT Médio</p><p className="text-2xl font-bold text-gray-800">{customerCSAT}</p></div>
+                        </div>
+                        <div className="space-y-4">
+                           {customerTickets.map(ticket => (
+                               <div key={ticket.id} onClick={() => onTicketSelect(ticket)} className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                                   <div className="flex justify-between items-center mb-1">
+                                       <p className="font-semibold text-blue-600">{ticket.subject}</p>
+                                       <span className={`px-2 py-0.5 text-xs rounded-full font-semibold ${ticket.status === 'Aberto' ? 'bg-red-100 text-red-700' : ticket.status === 'Pendente' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>{ticket.status}</span>
+                                   </div>
+                                   <p className="text-sm text-gray-500">Criado em: {new Date(ticket.createdAt).toLocaleDateString()} - Atribuído a: {AGENTS.find(a => a.id === ticket.agentId)?.name || 'N/A'}</p>
+                               </div>
+                           ))}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
+const Reports = ({ tickets }) => {
+    const agentPerformance = useMemo(() => {
+        return AGENTS.map(agent => { const resolvedByAgent = tickets.filter(t => t.agentId === agent.id && t.status === 'Resolvido'); const csatScores = resolvedByAgent.filter(t => t.csatScore !== null).map(t => t.csatScore); const avgCsat = csatScores.length > 0 ? (csatScores.reduce((a, b) => a + b, 0) / csatScores.length).toFixed(1) : 'N/A'; return { name: agent.name, resolved: resolvedByAgent.length, avgCsat: avgCsat === 'N/A' ? 0 : parseFloat(avgCsat) }; });
+    }, [tickets]);
+    const sentimentTrend = useMemo(() => { const sentimentsByDay = tickets.reduce((acc, ticket) => { const date = new Date(ticket.createdAt).toLocaleDateString('pt-BR'); if (!acc[date]) { acc[date] = { positive: 0, negative: 0, total: 0 }; } ticket.history.forEach(h => { if (h.sentiment === 'positive') acc[date].positive++; if (h.sentiment === 'negative') acc[date].negative++; acc[date].total++; }); return acc; }, {}); return Object.entries(sentimentsByDay).map(([date, counts]) => ({ date, positive: (counts.positive / counts.total) * 100, negative: (counts.negative / counts.total) * 100 })); }, [tickets]);
+    const volumeData = useMemo(() => { const counts = {}; tickets.forEach(ticket => { const date = new Date(ticket.createdAt).toLocaleDateString('pt-BR'); counts[date] = (counts[date] || 0) + 1; }); return Object.entries(counts).map(([name, value]) => ({ name, tickets: value })).slice(-7); }, [tickets]);
+    
+    return (
+        <div className="p-8"><h1 className="text-3xl font-bold text-gray-800 mb-6">Relatórios e Analytics</h1>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-lg"><h2 className="text-xl font-bold text-gray-800 mb-4">Desempenho por Agente</h2><ResponsiveContainer width="100%" height={300}><BarChart data={agentPerformance}><CartesianGrid strokeDasharray="3 3" vertical={false}/><XAxis dataKey="name"/><YAxis yAxisId="left" orientation="left" stroke="#8884d8"/><YAxis yAxisId="right" orientation="right" stroke="#82ca9d" domain={[0, 5]}/><Tooltip/><Legend/><Bar yAxisId="left" dataKey="resolved" fill="#8884d8" name="Tickets Resolvidos"/><Line yAxisId="right" type="monotone" dataKey="avgCsat" stroke="#82ca9d" name="CSAT Médio" strokeWidth={2}/></BarChart></ResponsiveContainer></div>
+                <div className="bg-white p-6 rounded-2xl shadow-lg"><h2 className="text-xl font-bold text-gray-800 mb-4">Volume de Tickets (Últimos 7 dias)</h2><ResponsiveContainer width="100%" height={300}><BarChart data={volumeData}><CartesianGrid strokeDasharray="3 3" vertical={false}/><XAxis dataKey="name" /><YAxis /><Tooltip /><Legend /><Bar dataKey="tickets" fill="#3b82f6" /></BarChart></ResponsiveContainer></div>
+                <div className="bg-white p-6 rounded-2xl shadow-lg"><h2 className="text-xl font-bold text-gray-800 mb-4">Tendência de Sentimento</h2><ResponsiveContainer width="100%" height={300}><LineChart data={sentimentTrend}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="date" /><YAxis unit="%"/><Tooltip /><Legend /><Line type="monotone" dataKey="positive" name="Positivo" stroke="#10b981" strokeWidth={2}/><Line type="monotone" dataKey="negative" name="Negativo" stroke="#ef4444" strokeWidth={2}/></LineChart></ResponsiveContainer></div>
+            </div>
+        </div>
+    );
+};
+
+// --- COMPONENTE PRINCIPAL ---
+export default function App() {
+    const [userSector, setUserSector] = useState('software');
+    const [tickets, setTickets] = useState([]);
+    const [articles, setArticles] = useState([]);
+    const [currentView, setCurrentView] = useState('dashboard');
+    const [selectedTicket, setSelectedTicket] = useState(null);
+    const [isCreatingTicket, setCreatingTicket] = useState(false);
+    const [viewingCustomerHistory, setViewingCustomerHistory] = useState(null); // Guarda o email do cliente
+
+    useEffect(() => { const sectorTickets = initialTickets.filter(t => t.sector === userSector); setTickets(sectorTickets); setArticles(knowledgeBaseArticles.filter(a => a.sector === userSector))}, [userSector]);
+
+    useEffect(() => { if (selectedTicket) { const updatedTicket = tickets.find(t => t.id === selectedTicket.id); if (updatedTicket) { setSelectedTicket(updatedTicket); } else { setSelectedTicket(null); setCurrentView('tickets'); }}}, [tickets, selectedTicket]);
+
+    const handleSectorChange = (newSector) => { setUserSector(newSector); setCurrentView('dashboard'); setSelectedTicket(null); }
+    const handleSaveTicket = (newTicket) => { setTickets(prev => [newTicket, ...prev]); setCreatingTicket(false); };
+    
+    const handleViewCustomerHistory = (customerEmail) => setViewingCustomerHistory(customerEmail);
+    const handleCloseCustomerHistory = () => setViewingCustomerHistory(null);
+    const handleSelectHistoryTicket = (ticket) => {
+        handleCloseCustomerHistory();
+        setSelectedTicket(ticket);
+        setCurrentView('ticket_detail');
+    };
+
+    const renderView = () => {
+        switch (currentView) {
+            case 'dashboard': return <Dashboard tickets={tickets} setCurrentView={setCurrentView} setSelectedTicket={setSelectedTicket} />;
+            case 'tickets': return <TicketList tickets={tickets} setTickets={setTickets} setCurrentView={setCurrentView} setSelectedTicket={setSelectedTicket} setCreatingTicket={setCreatingTicket} />;
+            case 'ticket_detail': return selectedTicket ? <TicketDetail ticket={selectedTicket} onBack={() => setCurrentView('tickets')} setTickets={setTickets} allTickets={tickets} onViewCustomerHistory={handleViewCustomerHistory} /> : <div className="p-8 text-center text-gray-500">Selecione um ticket para ver os detalhes.</div>;
+            case 'knowledge_base': return <KnowledgeBase articles={articles} />;
+            case 'reports': return <Reports tickets={tickets} />;
+            case 'projects': return <div className="p-8"><h1 className="text-3xl font-bold text-gray-800">Módulo de Projetos (Em Construção)</h1></div>;
+            default: return <Dashboard tickets={tickets} setCurrentView={setCurrentView} setSelectedTicket={setSelectedTicket} />;
+        }
+    };
+
+    return (
+        <div className="flex flex-col h-screen bg-gray-50 font-sans">
+            <header className="p-4 bg-white border-b border-gray-200 flex justify-between items-center shrink-0"><div className="flex items-center space-x-3"><BrainCircuit className="text-blue-600" size={32} /><h1 className="text-2xl font-bold text-gray-800">Módulo Helpdesk AI</h1></div><div className="flex items-center"><div className="flex items-center space-x-2"><Building size={20} className="text-gray-500"/><select value={userSector} onChange={(e) => handleSectorChange(e.target.value)} className="font-semibold bg-transparent rounded-lg p-1 focus:outline-none">{Object.entries(SECTORS).map(([key, value]) => (<option key={key} value={key}>{value}</option>))}</select></div><div className="mx-6 h-8 border-l border-gray-300"></div><UserProfile userSector={userSector} /></div></header>
+            <TabNavigation currentView={currentView} setCurrentView={setCurrentView} />
+            <main className="flex-1 overflow-y-auto">{renderView()}</main>
+            {isCreatingTicket && <NewTicketForm onSave={handleSaveTicket} onCancel={() => setCreatingTicket(false)} userSector={userSector} />}
+            {viewingCustomerHistory && <CustomerHistoryPanel customerEmail={viewingCustomerHistory} allTickets={initialTickets} onClose={handleCloseCustomerHistory} onTicketSelect={handleSelectHistoryTicket} />}
+        </div>
+    );
+}
